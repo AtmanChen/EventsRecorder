@@ -93,7 +93,7 @@ extension EventsListViewController: UITableViewDelegate, UITableViewDataSource {
 			cell = UITableViewCell(style: .default, reuseIdentifier: cellId)
 		}
 		let event = viewModel.events[indexPath.row]
-		cell?.textLabel?.text = "\(event.id). \(event.date.description)"
+		cell?.textLabel?.text = "\(event.id). \(event.date)"
 		return cell!
 	}
 	func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {

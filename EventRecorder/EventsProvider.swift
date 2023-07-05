@@ -11,26 +11,36 @@ import SQLite
 protocol EventsProvider {
 	func createEvent(name: String?, timestamp: TimeInterval, date: Date) async -> Event?
 	func deleteEvent(by id: Int64) async -> Bool
-	func getAllEvents() async -> [Event]
-	func getTotalEventsCount() async -> Int
+	func getEvents(from: Date, to: Date) async -> [Event]
+	func getTotalEventsCount() async -> Int64
 	func getTotalDistinctDaysCount() async -> Int64
-	func getCurrentConsecutiveDaysCount() async -> Int
-	func getMaxConsecutiveDaysCount() async -> Int
+	func getCurrentConsecutiveDaysCount() async -> Int64
+	func getMaxConsecutiveDaysCount() async -> Int64
 }
 
-private let daySeconds: TimeInterval = 24 * 60 * 60
+let daySeconds: TimeInterval = 24 * 60 * 60
 
 actor SQLiteEventsProvider: EventsProvider {
 	let userId: String
 	static private let eventsFileName = "events.sqlite3"
-	private var db: Connection?
+	
+	// MARK: Event statistics structure
+	private let eventStatistics = Table("eventStatistics")
+	private let uid = Expression<String>("uid")
+	private let totalEventCount = Expression<Int64>("totalEventCount")
+	private let consecutiveSegments = Expression<String>("consecutiveEventSegments")
+	
+	// MARK: Event structure
 	private let events = Table("events")
 	private let id = Expression<Int64>("id")
 	private let name = Expression<String?>("name")
 	private let timestamp = Expression<TimeInterval>("timestamp")
 	private let date = Expression<Date>("date")
 	private let deleted = Expression<Bool>("deleted")
+	
+	// MARK: db
 	private var dbPath: String = ""
+	private var db: Connection?
 	
 	init(userId: String) {
 		self.userId = userId
@@ -62,6 +72,11 @@ actor SQLiteEventsProvider: EventsProvider {
 				table.column(date, unique: false)
 				table.column(deleted)
 			})
+			try db.run(eventStatistics.create(ifNotExists: true) { table in
+				table.column(uid, primaryKey: true)
+				table.column(totalEventCount)
+				table.column(consecutiveSegments)
+			})
 			print("Events table created at: \(self.dbPath)")
 		} catch {
 			print("Events table created failed...")
@@ -73,8 +88,33 @@ actor SQLiteEventsProvider: EventsProvider {
 			print("Events db connection not found")
 			return nil
 		}
-		let insert = events.insert(self.name <- name, self.timestamp <- timestamp, self.date <- date, self.deleted <- false)
 		do {
+			// modify statistics
+			let stateRow = eventStatistics.filter(uid == self.userId)
+			let eventStatisticsRow = try db.pluck(stateRow)
+			if let eventStatisticsRow {
+				let updateEventCount = eventStatisticsRow[totalEventCount] + 1
+				let consecutiveSegments = stringToConsecutiveEventSegments(eventStatisticsRow[consecutiveSegments])
+				let updatedConsecutiveSegments = consecutiveSegments.mergeDate(date)
+				let updatedConsecutiveSegmentsString = consecutiveEventSegmentsToString(updatedConsecutiveSegments)
+				print("consecutiveSegmentsString: \(updatedConsecutiveSegmentsString)")
+				let eventStatisticsUpdate = stateRow.update(
+					self.totalEventCount <- updateEventCount,
+					self.consecutiveSegments <- updatedConsecutiveSegmentsString
+				)
+				try db.run(eventStatisticsUpdate)
+			} else {
+				let consecutiveSegments = [EventStatistics.ConsecutiveSegment]().mergeDate(date)
+				let consecutiveSegmentsString = consecutiveEventSegmentsToString(consecutiveSegments)
+				let eventStatisticsInsert = self.eventStatistics.insert(
+					uid <- self.userId,
+					totalEventCount <- 1,
+					self.consecutiveSegments <- consecutiveSegmentsString
+				)
+				print("consecutiveSegmentsString: \(consecutiveSegmentsString)")
+				try db.run(eventStatisticsInsert)
+			}
+			let insert = self.events.insert(self.name <- name, self.timestamp <- timestamp, self.date <- date, self.deleted <- false)
 			let rowId = try db.run(insert)
 			print("Event created with rowId: \(rowId)")
 			return Event(id: rowId, name: name, timestamp: timestamp, date: date, deleted: false)
@@ -89,21 +129,38 @@ actor SQLiteEventsProvider: EventsProvider {
 			return false
 		}
 		let filter = events.filter(self.id == id)
+		guard let eventToDelete = try? db.pluck(filter) else { return false }
 		do {
 			try db.run(filter.update(self.deleted <- true))
+			let otherEventsOnSameDay = try db.prepare(events.filter(self.date == eventToDelete[date] && self.id != id && self.deleted == false))
+			if Array(otherEventsOnSameDay).count == 0 {
+				let stateRow = eventStatistics.filter(uid == self.userId)
+				if let eventStatisticsRow = try db.pluck(stateRow) {
+					let consecutiveSegments = stringToConsecutiveEventSegments(eventStatisticsRow[consecutiveSegments])
+					let updatedConsecutiveSegments = consecutiveSegments.removeDate(eventToDelete[date])
+					let updatedConsecutiveSegmentsString = consecutiveEventSegmentsToString(updatedConsecutiveSegments)
+					let eventStatisticsUpdate = stateRow.update(
+						self.consecutiveSegments <- updatedConsecutiveSegmentsString
+					)
+					try db.run(eventStatisticsUpdate)
+				}
+			}
+			
 			return true
 		} catch {
 			print("Event delete failed: \(error)")
 			return false
 		}
 	}
-	func getAllEvents() async -> [Event] {
+	func getEvents(from: Date, to: Date) async -> [Event] {
 		var results: [Event] = []
 		guard let db else {
 			print("Events db connection not found")
 			return results
 		}
-		let orderedEvents = events.order(id.desc).filter(!deleted)
+		let orderedEvents = events
+			.filter(date >= from && date <= to && deleted == false)
+			.order(self.timestamp.desc)
 		do {
 			for event in try db.prepare(orderedEvents) {
 				results.append(Event(id: event[id], name: event[name], timestamp: event[timestamp], date: event[date], deleted: false))
@@ -114,13 +171,17 @@ actor SQLiteEventsProvider: EventsProvider {
 			return []
 		}
 	}
-	func getTotalEventsCount() async -> Int {
+	func getTotalEventsCount() async -> Int64 {
 		guard let db else {
 			print("Events db connection not found")
 			return 0
 		}
 		do {
-			return try db.scalar(events.count)
+			let stateRow = eventStatistics.filter(uid == self.userId)
+			if let eventStatisticsRow = try db.pluck(stateRow) {
+				return eventStatisticsRow[totalEventCount]
+			}
+			return 0
 		} catch {
 			return 0
 		}
@@ -131,100 +192,54 @@ actor SQLiteEventsProvider: EventsProvider {
 			return 0
 		}
 		do {
-			let query = """
-				SELECT COUNT(*)
-				FROM (
-						SELECT strftime('%Y-%m-%d', date) AS date_only
-						FROM events
-						GROUP BY date_only
-				)
-				"""
-			
-			if let count = try db.scalar(query) as? Int64 {
-				print("Distinct date count: \(count)")
-				return count
-			} else {
-				print("Error: Failed to convert the result to Int64")
+			let stateRow = eventStatistics.filter(uid == self.userId)
+			if let eventStatisticsRow = try db.pluck(stateRow) {
+				let consecutiveSegmentsString = eventStatisticsRow[consecutiveSegments]
+				let consecutiveSegments = stringToConsecutiveEventSegments(consecutiveSegmentsString)
+				return consecutiveSegments.totalDistinctDays()
 			}
+			return 0
 		} catch {
 			print("Error: \(error)")
 		}
 		return 0
 	}
-	func getMaxConsecutiveDaysCount() async -> Int {
+	func getMaxConsecutiveDaysCount() async -> Int64 {
 		guard let db else {
 			print("Events db connection not found")
 			return 0
 		}
-		
-		let orderedEvents = events.order(date)
-		
-		var maxConsecutiveDays = 0
-		var currentConsecutiveDays = 0
-		var previousDate: Date? = nil
-		
 		do {
-			for event in try db.prepare(orderedEvents) {
-				let eventDate = event[date]
-				if let pd = previousDate {
-					let isEventSameDay = Calendar.current.isDate(eventDate, inSameDayAs: pd)
-					print("Event date: \(pd) \(eventDate) \(isEventSameDay)")
-					if isEventSameDay {
-						previousDate = eventDate
-						continue
-					}
-					let isContinues = Calendar.current.isDate(eventDate, inSameDayAs: pd.addingTimeInterval(daySeconds))
-					if isContinues {
-						currentConsecutiveDays += 1
-					} else {
-						currentConsecutiveDays = 1
-					}
-				} else {
-					currentConsecutiveDays = 1
-				}
-				
-				maxConsecutiveDays = max(maxConsecutiveDays, currentConsecutiveDays)
-				previousDate = eventDate
+			let stateRow = eventStatistics.filter(uid == self.userId)
+			if let eventStatisticsRow = try db.pluck(stateRow) {
+				let consecutiveSegmentsString = eventStatisticsRow[consecutiveSegments]
+				let consecutiveSegments = stringToConsecutiveEventSegments(consecutiveSegmentsString)
+				return consecutiveSegments.maxConsecutiveDays()
 			}
+			return 0
 		} catch {
 			print("Error while calculating max consecutive days: \(error)")
 		}
 		
-		return maxConsecutiveDays
+		return 0
 	}
-	func getCurrentConsecutiveDaysCount() async -> Int {
+	func getCurrentConsecutiveDaysCount() async -> Int64 {
 		guard let db else {
 			print("Events db connection not found")
 			return 0
 		}
-		let orderedEvents = events.order(date.desc)
-		
-		var currentConsecutiveDays = 0
-		var previousDate: Date? = nil
 		do {
-			for event in try db.prepare(orderedEvents) {
-				let eventDate = event[date]
-				if currentConsecutiveDays == 0 {
-					currentConsecutiveDays = 1
-				} else {
-					let isEventSameDay = Calendar.current.isDate(eventDate, inSameDayAs: previousDate!)
-					if isEventSameDay {
-						previousDate = eventDate
-						continue
-					}
-					let isEventContinuse = Calendar.current.isDate(eventDate, inSameDayAs: previousDate!.addingTimeInterval(-daySeconds))
-					if isEventContinuse {
-						currentConsecutiveDays += 1
-					} else {
-						break
-					}
-				}
-				previousDate = eventDate
+			let stateRow = eventStatistics.filter(uid == self.userId)
+			if let eventStatisticsRow = try db.pluck(stateRow) {
+				let consecutiveSegmentsString = eventStatisticsRow[consecutiveSegments]
+				let consecutiveSegments = stringToConsecutiveEventSegments(consecutiveSegmentsString)
+				return consecutiveSegments.last!.count
 			}
+			return 0
 		} catch {
 			print("Error while calculating current consecutive days: \(error)")
 		}
-		return currentConsecutiveDays
+		return 0
 	}
 }
 

@@ -16,10 +16,17 @@ final class EventsListViewModel {
 	}
 	@Published var events: [Event] = []
 	@Published var totalDistinctDays: Int64 = 0
-	@Published var maxConsecutiveDays: Int = 0
-	@Published var currentConsecutiveDaysCount: Int = 0
+	@Published var maxConsecutiveDays: Int64 = 0
+	@Published var currentConsecutiveDaysCount: Int64 = 0
 	func fetchEvents() async {
-		async let events = await self.eventsManager.getAllEvents()
+		let date: Date
+		if events.isEmpty {
+			date = Date().dateWithOnlyYearMonthDay()!
+		} else {
+			date = events.last!.date
+		}
+		let pageDate = date.diffDaysCount(days: -30)
+		async let events = await self.eventsManager.getEvents(from: pageDate, to: date)
 		async let currentConsecutiveDaysCount = await self.eventsManager.getCurrentConsecutiveDaysCount()
 		async let totalDistinctDays = await self.eventsManager.getTotalDistinctDaysCount()
 		async let maxConsecutiveDays = await self.eventsManager.getMaxConsecutiveDaysCount()
