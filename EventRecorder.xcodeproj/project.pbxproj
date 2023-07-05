@@ -21,7 +21,7 @@
 		7148E2CE2A52FD7900C18AD4 /* EventsListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7148E2CD2A52FD7900C18AD4 /* EventsListViewModel.swift */; };
 		71E2C84F2A54DA150013DB26 /* EventStatistics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E2C84E2A54DA150013DB26 /* EventStatistics.swift */; };
 		71E2C8512A54FF150013DB26 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E2C8502A54FF150013DB26 /* Utils.swift */; };
-		71E2C8532A5504710013DB26 /* Array+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E2C8522A5504710013DB26 /* Array+Extension.swift */; };
+		71E2C8532A5504710013DB26 /* Array+EventStatistics.ConsecutiveSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E2C8522A5504710013DB26 /* Array+EventStatistics.ConsecutiveSegment.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,7 +40,7 @@
 		7148E2CD2A52FD7900C18AD4 /* EventsListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsListViewModel.swift; sourceTree = "<group>"; };
 		71E2C84E2A54DA150013DB26 /* EventStatistics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventStatistics.swift; sourceTree = "<group>"; };
 		71E2C8502A54FF150013DB26 /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
-		71E2C8522A5504710013DB26 /* Array+Extension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Extension.swift"; sourceTree = "<group>"; };
+		71E2C8522A5504710013DB26 /* Array+EventStatistics.ConsecutiveSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+EventStatistics.ConsecutiveSegment.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -78,7 +78,7 @@
 				7148E2AE2A52CBCB00C18AD4 /* SceneDelegate.swift */,
 				7148E2B02A52CBCB00C18AD4 /* EventsListViewController.swift */,
 				7148E2CD2A52FD7900C18AD4 /* EventsListViewModel.swift */,
-				71E2C8522A5504710013DB26 /* Array+Extension.swift */,
+				71E2C8522A5504710013DB26 /* Array+EventStatistics.ConsecutiveSegment.swift */,
 				7148E2C42A52D02E00C18AD4 /* Date+Extension.swift */,
 				7148E2C02A52CC1600C18AD4 /* Event.swift */,
 				71E2C84E2A54DA150013DB26 /* EventStatistics.swift */,
@@ -173,7 +173,7 @@
 				7148E2C12A52CC1600C18AD4 /* Event.swift in Sources */,
 				7148E2CE2A52FD7900C18AD4 /* EventsListViewModel.swift in Sources */,
 				7148E2CC2A52E04200C18AD4 /* EventsManager.swift in Sources */,
-				71E2C8532A5504710013DB26 /* Array+Extension.swift in Sources */,
+				71E2C8532A5504710013DB26 /* Array+EventStatistics.ConsecutiveSegment.swift in Sources */,
 				7148E2B12A52CBCB00C18AD4 /* EventsListViewController.swift in Sources */,
 				7148E2AD2A52CBCB00C18AD4 /* AppDelegate.swift in Sources */,
 				71E2C8512A54FF150013DB26 /* Utils.swift in Sources */,
